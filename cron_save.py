@@ -4,7 +4,11 @@ from datetime import datetime
 import os
 
 # 優先讀取環境變數裡的檔案路徑，如果沒有就用預設值
-DB_FILE = os.getenv("GSR_DB_PATH", "gsr_history.csv")
+if not os.path.exists("data"):
+    os.makedirs("data")
+
+# 鎖定路徑在 data 子目錄
+DB_FILE = "data/gsr_history.csv"
 
 def ensure_db_exists(csv_path):
     """確保 CSV 檔案存在，若不存在則初始化一個帶有 Header 的檔案"""
