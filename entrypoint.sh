@@ -5,7 +5,7 @@ PYTHON_PATH=$(which python)
 
 # 2. 寫入 crontab (注意：路徑改為 /app/...)
 # 我們直接把任務寫入 /etc/crontab 或 cron.d
-echo "10 5 * * * root $PYTHON_PATH /app/cron_save.py >> /var/log/cron.log 2>&1" > /etc/cron.d/gsr-cron
+echo "0 * * * * root $PYTHON_PATH /app/cron_save.py >> /var/log/cron.log 2>&1" > /etc/cron.d/gsr-cron
 
 # 3. 修正權限
 chmod 0644 /etc/cron.d/gsr-cron
