@@ -17,4 +17,4 @@ service cron start
 $PYTHON_PATH /app/cron_save.py
 
 # 6. 啟動 Streamlit
-streamlit run app.py --server.port 80 --server.address 0.0.0.0
+streamlit run app.py --server.port 8080 --server.address 0.0.0.0

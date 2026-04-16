@@ -32,7 +32,7 @@ pip install streamlit yfinance pandas plotly
 ./.venv/bin/python -m streamlit run app.py
 ```
 
-📦 容器化部署 (Docker/docker)
+## 📦 容器化部署 (Docker/docker)
 這是目前最穩定、最推薦的部署方式，避開了權限與環境變數的衝突。
 
 1. 構建鏡像 (Build)
@@ -54,24 +54,10 @@ docker run -d \
   /bin/bash -c "service cron start && python cron_save.py && streamlit run app.py --server.port 80 --server.address 0.0.0.0"
 ```
 
-☁️ Zeabur 雲端部署設定
-若部署於 Zeabur，請在介面中完成以下設定：
+## ☁️ Zeabur 雲端部署設定
+若部署於 Zeabur，請選擇 github 安裝
 
-Start Command:
-```
-service cron start && python cron_save.py && streamlit run app.py --server.port 80 --server.address 0.0.0.0
-```
-
-Volumes:
-將 data 掛載至 /app (確保 CSV 檔案不隨部署消失)。
-
-Environment Variables:
-
-TZ: Asia/Taipei (確保定時紀錄的時間準確)。
-
-PYTHONUNBUFFERED: 1 (即時日誌輸出)。
-
-📊 數據結構
+## 📊 數據結構
 gsr_history.csv: 儲存日期、金價、銀價及金銀比。
 
 cron_save.py: 具備冪等性設計，同一天重複執行不會產生冗餘數據。
