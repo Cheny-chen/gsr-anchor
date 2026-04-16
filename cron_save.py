@@ -4,11 +4,19 @@ from datetime import datetime
 import os
 
 # 優先讀取環境變數裡的檔案路徑，如果沒有就用預設值
-if not os.path.exists("data"):
-    os.makedirs("data")
+# 1. 從環境變數抓路徑，沒設的話就預設在 data 子目錄 (修正拼字)
+db_path = os.getenv("GSR_DB_PATH", "data/gsr_history.csv")
 
-# 鎖定路徑在 data 子目錄
-DB_FILE = "data/gsr_history.csv"
+# 2. 自動抓取目錄名稱 (例如 data)
+db_dir = os.path.dirname(db_path)
+
+# 3. 如果目錄名稱存在且該目錄還沒建立，就幫它建立
+if db_dir and not os.path.exists(db_dir):
+    os.makedirs(db_dir)
+    print(f"[{datetime.now()}] 已建立儲存目錄: {db_dir}")
+
+# 4. 鎖定全域變數名稱 (供後續 logic 使用)
+DB_FILE = db_path
 
 def ensure_db_exists(csv_path):
     """確保 CSV 檔案存在，若不存在則初始化一個帶有 Header 的檔案"""
