@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # 1. 獲取 Docker 內部 Python 的絕對路徑
 PYTHON_PATH=$(which python)

@@ -1,7 +1,7 @@
+import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-import os
 
 # 優先讀取環境變數裡的檔案路徑，如果沒有就用預設值
 # 1. 從環境變數抓路徑，沒設的話就預設在 data 子目錄 (修正拼字)

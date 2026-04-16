@@ -42,20 +42,27 @@ docker build -t gsr-anchor .
 ```
 
 2. 啟動容器 (Run)
-我們採用「指令注入」模式確保 Cron 服務啟動：
-
 ```Bash
-docker run -d \
-  --replace \
-  -p 8080:80 \
-  -v $(pwd):/app \
-  --name gsr-anchor \
-  localhost/gsr-anchor:latest \
-  /bin/bash -c "service cron start && python cron_save.py && streamlit run app.py --server.port 80 --server.address 0.0.0.0"
+podman stop gsr-anchor; podman rm gsr-anchor
 ```
+
+3. 移除容器 (Run)
+```Bash
+podman run -d --name gsr-anchor -p 8080:8080 -e TZ=Asia/Taipei -v $(pwd)/data:/app/data:Z   gsr-anchor
+```
+
 
 ## ☁️ Zeabur 雲端部署設定
 若部署於 Zeabur，請選擇 github 安裝
+1. Variable (參考範例)
+```
+GSR_DB_PATH: data/gsr_history.csv
+STREAMLIT_SERVER_PORT: 8080
+TZ: Asia/Taipei
+```
+2. Mount Volumes: /app/data
+
+ 
 
 ## 📊 數據結構
 gsr_history.csv: 儲存日期、金價、銀價及金銀比。

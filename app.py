@@ -1,14 +1,22 @@
+import os
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.express as px
-import os
+import plotly.express as px
+from datetime import timedelta
 
 # 設定頁面與樣式
 st.set_page_config(page_title="GSR Anchor Dashboard", layout="wide")
 
-# 與 cron_save.py 共用同一個檔名
-DB_FILE = "gsr_history.csv"
+# 1. 從環境變數抓路徑，沒設的話就預設在 data 子目錄 (修正拼字)
+db_path = os.getenv("GSR_DB_PATH", "data/gsr_history.csv")
+
+# 2. 自動抓取目錄名稱 (例如 data)
+db_dir = os.path.dirname(db_path)
+
+# 3. 鎖定全域變數名稱 (供後續 logic 使用)
+DB_FILE = db_path
 
 # --- 核心函式 ---
 @st.cache_data(ttl=300) # 網頁打開時，每 5 分鐘快取一次最新報價
@@ -60,11 +68,22 @@ st.subheader("📊 歷史趨勢分析 (無人值守自動紀錄)")
 hist_df = load_history()
 
 if hist_df is not None:
-    # 畫圖
-    fig = px.line(hist_df, x="Date", y="GSR", title="金銀比歷史波動曲線")
-    fig.add_hline(y=30, line_dash="dot", line_color="red", annotation_text="收割目標 30:1")
-    st.plotly_chart(fig, use_container_width=True)
+    # 1. 畫圖：直接加入 markers=True 確保點會出現
+    fig = px.line(hist_df, x="Date", y="GSR", markers=True, title="金銀比歷史波動曲線")
     
+    # 2. 加入紅色目標線
+    fig.add_hline(y=30, line_dash="dot", line_color="red", annotation_text="收割目標 30:1")
+
+    # 3. 如果只有一筆資料，強制展開 X 軸範圍 (將 df 改為 hist_df)
+    if len(hist_df) == 1:
+        single_date = pd.to_datetime(hist_df['Date'].iloc[0])
+        # 讓 X 軸顯示這一天的前後各 3 天，避免縮成一條線
+        fig.update_xaxes(range=[single_date - timedelta(days=3), 
+                                single_date + timedelta(days=3)])
+
+    # 4. 顯示圖表
+    st.plotly_chart(fig, use_container_width=True)
+
     # 狀態提醒
     if current_gsr > 80:
         st.warning("⚠️ 目前白銀被嚴重低估，是「累積白銀」的好時機。")

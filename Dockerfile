@@ -1,22 +1,28 @@
 FROM python:3.9-slim
 
-# 安裝 cron 與基本工具
+# 安裝 cron 與基本工具 (清理 cache 以減少鏡像體積)
 RUN apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
 
+# 設定容器內的根目錄
 WORKDIR /app
 
-# 1. 安裝套件
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 2. 【核心改動】直接把代碼複製進去，不要依賴外部掛載
+# 1. 複製專案原始碼 (app.py, requirements.txt 等)
 COPY . .
 
-# 3. 給予所有檔案讀取權限
+# 2. 將啟動腳本放入系統執行路徑，方便直接呼叫
+COPY entrypoint.sh /usr/local/bin/
+
+# 3. 在 Build 階段賦予執行權限，確保腳本可被執行
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# 4. 安裝 Python 依賴套件
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 5. 確保 /app 目錄下的檔案對所有使用者皆可讀取與執行 (針對 Streamlit 執行權限)
 RUN chmod -R 755 /app
 
-# 4. 暴露埠
-EXPOSE 80
+# 6. 宣告容器監聽的埠號 (僅供參考與對齊)
+EXPOSE 8080
 
-# 5. 直接用命令列啟動 (捨棄 entrypoint.sh 避免格式問題)
-CMD service cron start && python cron_save.py && streamlit run app.py --server.port 80 --server.address 0.0.0.0
+# 7. 使用 sh 直接執行絕對路徑腳本
+CMD ["sh", "/usr/local/bin/entrypoint.sh"]
