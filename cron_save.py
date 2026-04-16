@@ -3,60 +3,52 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
-# 優先讀取環境變數裡的檔案路徑，如果沒有就用預設值
-# 1. 從環境變數抓路徑，沒設的話就預設在 data 子目錄 (修正拼字)
+# 1. 環境設定
 db_path = os.getenv("GSR_DB_PATH", "data/gsr_history.csv")
-
-# 2. 自動抓取目錄名稱 (例如 data)
-db_dir = os.path.dirname(db_path)
-
-# 3. 如果目錄名稱存在且該目錄還沒建立，就幫它建立
-if db_dir and not os.path.exists(db_dir):
-    os.makedirs(db_dir)
-    print(f"[{datetime.now()}] 已建立儲存目錄: {db_dir}")
-
-# 4. 鎖定全域變數名稱 (供後續 logic 使用)
 DB_FILE = db_path
 
 def ensure_db_exists(csv_path):
-    """確保 CSV 檔案存在，若不存在則初始化一個帶有 Header 的檔案"""
+    """確保 CSV 檔案存在，新增 GSR_COMEX 與 GSR_MCX 欄位"""
     if not os.path.exists(csv_path):
-        df = pd.DataFrame(columns=["Date", "Gold", "Silver", "GSR"])
+        # 這裡新增了 GSR_MCX 欄位
+        df = pd.DataFrame(columns=["Date", "Gold", "Silver_COMEX", "Silver_MCX", "GSR_COMEX", "GSR_MCX"])
         df.to_csv(csv_path, index=False)
-        print(f"[{datetime.now()}] 檢測到資料庫不存在，已自動建立: {csv_path}")
+        print(f"[{datetime.now()}] 初始資料庫已建立: {csv_path}")
 
 def run_auto_save():
-    # 執行前置檢查
     ensure_db_exists(DB_FILE)
     
     try:
-        # 2. 抓取即時報價 (yfinance)
+        # 2. 抓取三項核心報價
         gold_ticker = yf.Ticker("GC=F")
-        silver_ticker = yf.Ticker("SI=F")
+        silver_comex_ticker = yf.Ticker("SI=F")
+        silver_mcx_ticker = yf.Ticker("SILVERBEES.NS")
         
-        # 使用 fast_info 獲取最新成交價，這在 2026 年依然是最穩定的方式
         g_price = round(gold_ticker.fast_info['last_price'], 2)
-        s_price = round(silver_ticker.fast_info['last_price'], 2)
-        current_gsr = round(g_price / s_price, 2)
+        s_comex_price = round(silver_comex_ticker.fast_info['last_price'], 2)
+        s_mcx_price = round(silver_mcx_ticker.fast_info['last_price'], 2)
+
+        # 3. 分別計算兩套 GSR
+        gsr_comex = round(g_price / s_comex_price, 2)
+        gsr_mcx = round(g_price / s_mcx_price, 2)
+        
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # 3. 準備新數據
-        new_row = pd.DataFrame([[today, g_price, s_price, current_gsr]], 
-                                columns=["Date", "Gold", "Silver", "GSR"])
+        # 4. 準備新數據列 (對應 6 個欄位)
+        new_row = pd.DataFrame([[today, g_price, s_comex_price, s_mcx_price, gsr_comex, gsr_mcx]], 
+                                columns=["Date", "Gold", "Silver_COMEX", "Silver_MCX", "GSR_COMEX", "GSR_MCX"])
 
-        # 4. 讀取現有資料並合併
+        # 5. 讀取並合併 (Idempotency 檢查)
         df = pd.read_csv(DB_FILE)
-        
-        # 5. 避免同一天重複紀錄 (Idempotency 冪等性)
-        if today not in df["Date"].values:
+        if today not in df["Date"].astype(str).values:
             df = pd.concat([df, new_row], ignore_index=True)
             df.to_csv(DB_FILE, index=False)
-            print(f"[{today}] 紀錄成功: Gold {g_price}, Silver {s_price}, GSR {current_gsr}")
+            print(f"[{today}] 雙市場紀錄成功！")
         else:
-            print(f"[{today}] 今日數據已存在，跳過儲存。")
+            print(f"[{today}] 今日數據已存在。")
 
     except Exception as e:
-        print(f"[{datetime.now()}] 自動紀錄過程發生錯誤: {str(e)}")
+        print(f"[{datetime.now()}] 存檔失敗: {str(e)}")
 
 if __name__ == "__main__":
     run_auto_save()

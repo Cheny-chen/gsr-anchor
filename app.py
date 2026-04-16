@@ -2,50 +2,87 @@ import os
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.express as px
-import plotly.express as px
-from datetime import timedelta
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 # 設定頁面與樣式
 st.set_page_config(page_title="GSR Anchor Dashboard", layout="wide")
 
-# 1. 從環境變數抓路徑，沒設的話就預設在 data 子目錄 (修正拼字)
+# 1. 路徑設定
 db_path = os.getenv("GSR_DB_PATH", "data/gsr_history.csv")
-
-# 2. 自動抓取目錄名稱 (例如 data)
-db_dir = os.path.dirname(db_path)
-
-# 3. 鎖定全域變數名稱 (供後續 logic 使用)
 DB_FILE = db_path
 
-# --- 核心函式 ---
-@st.cache_data(ttl=300) # 網頁打開時，每 5 分鐘快取一次最新報價
+# --- 功能函式 ---
 def get_live_prices():
     try:
-        g = yf.Ticker("GC=F").fast_info['last_price']
-        s = yf.Ticker("SI=F").fast_info['last_price']
-        return round(g, 2), round(s, 2)
-    except:
-        return 4800.0, 80.0 # 抓取失敗時的保底值
+        # 1. 抓取報價 (改用 history 確保穩定性)
+        gold = yf.Ticker("GC=F").history(period="1d")['Close'].iloc[-1]
+        silver_comex = yf.Ticker("SI=F").history(period="1d")['Close'].iloc[-1]
+        
+        # 抓取印度白銀 (改用 history 抓取最新收盤價，避免 2.55 這種異常值)
+        india_ticker = yf.Ticker("SILVERBEES.NS")
+        india_history = india_ticker.history(period="1d")
+        silver_mcx_inr = india_history['Close'].iloc[-1]
+        
+        # 2. 抓取匯率 (USD/INR)
+        usdinr = yf.Ticker("USDINR=X").info.get('regularMarketPrice')
+
+        # 3. 換算印度銀價回美金 (對齊天秤)
+        silver_mcx_usd = silver_mcx_inr * 31.1035
+
+        # Get current price info
+        print('---', usdinr, silver_mcx_usd)
+        
+        return round(gold, 2), round(silver_comex, 2), round(silver_mcx_usd, 2), usdinr
+    except Exception as e:
+        st.error(f"數據更新失敗: {e}")
+        return 0.0, 0.0, 0.0
 
 def load_history():
     if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
-        return df
+        try:
+            df = pd.read_csv(DB_FILE)
+            df['Date'] = pd.to_datetime(df['Date'])
+            return df
+        except:
+            return None
     return None
 
+# 執行讀取
+hist_df = load_history()
+
 # --- UI 介面 ---
-st.title("🥇 GSR Anchor | 金銀比監測站")
+st.title("🥇 GSR Anchor | 全球白銀戰情室")
 
 # 區塊 A: 即時看板
-g_price, s_price = get_live_prices()
-current_gsr = round(g_price / s_price, 2)
+g_live, s_comex_live, s_mcx_live, usdinr = get_live_prices()
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Gold Price (oz)", f"${g_price}")
-col2.metric("Silver Price (oz)", f"${s_price}")
-col3.metric("Current GSR", current_gsr, delta=f"{round(current_gsr - 60, 2)} (vs 基準 60)")
+if g_live > 0:
+    current_gsr = round(g_live / s_comex_live, 2)
+    india_gsr = round(g_live / s_mcx_live, 2) 
+    
+    # 計算印度相對於全球的溢價差
+    gsr_diff = round(india_gsr - current_gsr, 2)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("黃金 COMEX", f"${g_live}")
+    col2.metric("白銀 COMEX", f"${s_comex_live}")
+    col3.metric("印度 Silver BEES", f"₹{s_mcx_live}",
+                delta=f"{round(s_mcx_live / usdinr, 2)} (USD)",
+                delta_color="normal")
+
+    # 顯示 COMEX GSR (基準 60)
+    col4.metric("COMEX GSR", current_gsr, 
+                delta=f"{round(current_gsr - 60, 2)} (vs 60)", 
+                delta_color="inverse")
+    
+    # 顯示 India GSR (對比 COMEX 的差值)
+    col5.metric("India GSR", india_gsr, 
+                delta=f"{gsr_diff} (vs 60)",
+                delta_color="inverse")
+else:
+    st.warning("⚠️ 無法獲取即時報價，請檢查網路。")
+    current_gsr = 60.0
 
 # 區塊 B: 實體資產轉換計算
 st.divider()
@@ -54,40 +91,70 @@ c1, c2, c3 = st.columns(3)
 qty = c1.number_input("您的白銀持有量", value=1.0, step=0.1)
 unit = c2.selectbox("單位", ["kg", "oz", "g"])
 
-# 換算邏輯 (1kg = 32.1507 oz)
 silver_oz = qty * 32.1507 if unit == "kg" else (qty / 31.1035 if unit == "g" else qty)
-# 換算回黃金公克 (1oz = 31.1035g)
 gold_g = (silver_oz / current_gsr) * 31.1035
 
-st.info(f"💡 目前您的 {qty} {unit} 白銀等值於 **{gold_g:.2f} 公克** 黃金 (約 **{gold_g/37.5:.2f} 台兩**)")
+with c3:
+    st.write("") 
+    st.info(f"💡 等值黃金: **{gold_g:.2f} g** (約 **{gold_g/37.5:.2f} 兩**)")
 
-# 區塊 C: 歷史區間分析 (自動讀取 CSV)
+# 區塊 C: 歷史區間分析
 st.divider()
-st.subheader("📊 歷史趨勢分析 (無人值守自動紀錄)")
 
-hist_df = load_history()
+if hist_df is not None and "Silver_COMEX" in hist_df.columns:
+    st.subheader("📊 COMEX vs. 印度 MCX 白銀趨勢對比")
 
-if hist_df is not None:
-    # 1. 畫圖：直接加入 markers=True 確保點會出現
-    fig = px.line(hist_df, x="Date", y="GSR", markers=True, title="金銀比歷史波動曲線")
-    
-    # 2. 加入紅色目標線
-    fig.add_hline(y=30, line_dash="dot", line_color="red", annotation_text="收割目標 30:1")
+    fig_compare = go.Figure()
 
-    # 3. 如果只有一筆資料，強制展開 X 軸範圍 (將 df 改為 hist_df)
+    # COMEX 軌跡
+    fig_compare.add_trace(go.Scatter(
+        x=hist_df["Date"], 
+        y=hist_df["Silver_COMEX"],
+        name="COMEX Silver (USD)", mode='lines+markers',
+        line=dict(color='#1f77b4'), marker=dict(size=8),
+        yaxis="y1"
+    ))
+
+    # 印度軌跡
+    fig_compare.add_trace(go.Scatter(
+        x=hist_df["Date"] + pd.Timedelta(hours=2), # 往後移 2 小時，視覺上會並排
+        y=hist_df["Silver_MCX"],
+        name="India MCX (INR)", mode='lines+markers',
+        line=dict(color='#2ca02c'), marker=dict(size=8),
+        yaxis="y2"
+    ))
+
+    # 修正後的 update_layout
+    fig_compare.update_layout(
+        title="全球與印度白銀同步率監控",
+        xaxis=dict(title="日期"),
+        # 左側 Y 軸
+        yaxis=dict(
+            title=dict(
+                text="COMEX 價格 (USD)",
+                font=dict(color="#1f77b4")
+            ),
+            tickfont=dict(color="#1f77b4")
+        ),
+        # 右側 Y 軸
+        yaxis2=dict(
+            title=dict(
+                text="印度價格 (INR)",
+                font=dict(color="#2ca02c")
+            ),
+            tickfont=dict(color="#2ca02c"),
+            overlaying="y",
+            side="right"
+        ),
+        legend=dict(x=0, y=1.1, orientation="h"),
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
+
     if len(hist_df) == 1:
-        single_date = pd.to_datetime(hist_df['Date'].iloc[0])
-        # 讓 X 軸顯示這一天的前後各 3 天，避免縮成一條線
-        fig.update_xaxes(range=[single_date - timedelta(days=3), 
-                                single_date + timedelta(days=3)])
+        single_date = hist_df['Date'].iloc[0]
+        fig_compare.update_xaxes(range=[single_date - timedelta(days=3), single_date + timedelta(days=3)])
 
-    # 4. 顯示圖表
-    st.plotly_chart(fig, use_container_width=True)
-
-    # 狀態提醒
-    if current_gsr > 80:
-        st.warning("⚠️ 目前白銀被嚴重低估，是「累積白銀」的好時機。")
-    elif current_gsr < 40:
-        st.error("🚨 白銀進入狂熱區間，請準備執行「換金計畫」。")
+    st.plotly_chart(fig_compare, use_container_width=True)
 else:
-    st.info("系統正在等待今日收盤後的第一次自動紀錄...")
+    st.info("⌛ 尚未發現符合格式的歷史資料。")
