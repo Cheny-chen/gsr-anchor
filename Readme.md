@@ -15,11 +15,11 @@ pip install streamlit yfinance pandas plotly
 ./.venv/bin/python -m streamlit run app.py
 
 # docker build
-docker build .
+docker build -t gsr-anchor
 
 # docker run
 docker run -d \
+  --replace \
   -p 8080:80 \
-  -v $(pwd)/gsr_history.csv:/app/gsr_history.csv \
-  --name gsr-monitor \
-  f58a21786c49
+  --name gsr-anchor \
+  gsr-anchor
